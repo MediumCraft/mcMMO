@@ -26,7 +26,6 @@ import net.kyori.adventure.text.TextComponent;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.SoundCategory;
-import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventPriority;
@@ -137,7 +136,7 @@ public class Roll extends AcrobaticsSubSkill {
          * Graceful is double the odds of a normal roll
          */
         Probability probability = getRollProbability(player);
-        Probability gracefulProbability = Probability.ofPercent(probability.getValue() * 2);
+        Probability gracefulProbability = Probability.ofValue(probability.getValue() * 2);
         String[] gracefulRollStrings = ProbabilityUtil.getRNGDisplayValues(gracefulProbability);
         gracefulRollChance = gracefulRollStrings[0];
         gracefulRollChanceLucky = gracefulRollStrings[1];
@@ -275,7 +274,7 @@ public class Roll extends AcrobaticsSubSkill {
     @NotNull
     public static Probability getGracefulProbability(Player player) {
         double gracefulOdds = ProbabilityUtil.getSubSkillProbability(SubSkillType.ACROBATICS_ROLL, player).getValue() * 2;
-        return Probability.ofPercent(gracefulOdds);
+        return Probability.ofValue(gracefulOdds);
     }
 
     /**
@@ -317,7 +316,7 @@ public class Roll extends AcrobaticsSubSkill {
         ItemStack boots = player.getInventory().getBoots();
         float xp = (float) (damage * (isRoll ? ExperienceConfig.getInstance().getRollXPModifier() : ExperienceConfig.getInstance().getFallXPModifier()));
 
-        if (boots != null && boots.containsEnchantment(Enchantment.PROTECTION_FALL)) {
+        if (boots != null && boots.containsEnchantment(mcMMO.p.getEnchantmentMapper().getFeatherFalling())) {
             xp *= ExperienceConfig.getInstance().getFeatherFallXPModifier();
         }
 

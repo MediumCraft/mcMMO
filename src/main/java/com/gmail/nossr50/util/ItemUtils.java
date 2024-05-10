@@ -23,6 +23,8 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Collections;
 import java.util.List;
 
+import static java.util.Objects.requireNonNull;
+
 public final class ItemUtils {
     /**
      * This is a static utility class, therefore we don't want any instances of
@@ -41,6 +43,81 @@ public final class ItemUtils {
         return mcMMO.getMaterialMapStore().isBow(item.getType().getKey().getKey());
     }
 
+    /**
+     * Exhaustive lookup for a Material by name.
+     * <p>
+     *     This method will first try a normal lookup, then a legacy lookup, then a lookup by ENUM name,
+     *      and finally a lookup by ENUM name with legacy name.
+     * @param materialName The name of the material to lookup
+     * @return The Material if found, or null if not found
+     */
+    public static @Nullable Material exhaustiveMaterialLookup(@NotNull String materialName) {
+        requireNonNull(materialName, "materialName cannot be null");
+
+        // First try a normal lookup
+        Material material = Material.matchMaterial(materialName);
+
+        // If that fails, try a legacy lookup
+        if (material == null) {
+            material = Material.matchMaterial(materialName, true);
+        }
+
+        // try to match to Material ENUM
+        if (material == null) {
+            material = Material.getMaterial(materialName.toUpperCase());
+        }
+
+        // try to match to Material ENUM with legacy name
+        if (material == null) {
+            material = Material.getMaterial(materialName.toUpperCase(), true);
+        }
+        return material;
+    }
+
+    /**
+     * Checks if a player has an item in their inventory or offhand.
+     *
+     * @param player Player to check
+     * @param material Material to check for
+     * @return true if the player has the item in their inventory or offhand, false otherwise
+     */
+    public static boolean hasItemIncludingOffHand(Player player, Material material) {
+        // Checks main inventory / item bar
+        boolean containsInMain = player.getInventory().contains(material);
+
+        if (containsInMain) {
+            return true;
+        }
+
+        return player.getInventory().getItemInOffHand().getType() == material;
+    }
+
+    /**
+     * Removes an item from a player's inventory, including their offhand.
+     *
+     * @param player Player to remove the item from
+     * @param material Material to remove
+     * @param amount Amount of the material to remove
+     */
+    public static void removeItemIncludingOffHand(@NotNull Player player, @NotNull Material material, int amount) {
+        // Checks main inventory / item bar
+        if (player.getInventory().contains(material)) {
+            player.getInventory().removeItem(new ItemStack(material, amount));
+            return;
+        }
+
+        // Check off-hand
+        final ItemStack offHandItem = player.getInventory().getItemInOffHand();
+        if (offHandItem.getType() == material) {
+            int newAmount = offHandItem.getAmount() - amount;
+            if (newAmount > 0) {
+                offHandItem.setAmount(newAmount);
+            } else {
+                player.getInventory().setItemInOffHand(new ItemStack(Material.AIR));
+            }
+        }
+    }
+
     // TODO: Unit tests
     public static boolean isCrossbow(@NotNull ItemStack item) {
         return mcMMO.getMaterialMapStore().isCrossbow(item.getType().getKey().getKey());
@@ -54,6 +131,10 @@ public final class ItemUtils {
     // TODO: Unit tests
     public static boolean isTrident(@NotNull ItemStack item) {
         return mcMMO.getMaterialMapStore().isTrident(item.getType().getKey().getKey());
+    }
+
+    public static boolean isMace(@NotNull ItemStack item) {
+        return mcMMO.getMaterialMapStore().isMace(item.getType().getKey().getKey());
     }
 
     public static boolean hasItemInEitherHand(@NotNull Player player, Material material) {
@@ -637,7 +718,8 @@ public final class ItemUtils {
         if(itemMeta == null)
             return;
 
-        itemMeta.addEnchant(Enchantment.DIG_SPEED, existingEnchantLevel + mcMMO.p.getAdvancedConfig().getEnchantBuff(), true);
+        itemMeta.addEnchant(mcMMO.p.getEnchantmentMapper().getEfficiency(),
+                existingEnchantLevel + mcMMO.p.getAdvancedConfig().getEnchantBuff(), true);
         itemStack.setItemMeta(itemMeta);
     }
 

@@ -1,6 +1,5 @@
 package com.gmail.nossr50.skills.alchemy;
 
-import com.gmail.nossr50.config.skills.alchemy.PotionConfig;
 import com.gmail.nossr50.datatypes.skills.SubSkillType;
 import com.gmail.nossr50.datatypes.skills.alchemy.AlchemyPotion;
 import com.gmail.nossr50.datatypes.skills.alchemy.PotionStage;
@@ -10,6 +9,7 @@ import com.gmail.nossr50.runnables.player.PlayerUpdateInventoryTask;
 import com.gmail.nossr50.runnables.skills.AlchemyBrewCheckTask;
 import com.gmail.nossr50.util.Permissions;
 import com.gmail.nossr50.util.player.UserManager;
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.BrewingStand;
@@ -32,11 +32,13 @@ public final class AlchemyPotionBrewer {
         }
 
         for (int i = 0; i < 3; i++) {
-            if (contents[i] == null || contents[i].getType() != Material.POTION && contents[i].getType() != Material.SPLASH_POTION && contents[i].getType() != Material.LINGERING_POTION) {
+            if (contents[i] == null || contents[i].getType() != Material.POTION
+                    && contents[i].getType() != Material.SPLASH_POTION
+                    && contents[i].getType() != Material.LINGERING_POTION) {
                 continue;
             }
 
-            if (getChildPotion(PotionConfig.getInstance().getPotion(contents[i]), contents[Alchemy.INGREDIENT_SLOT]) != null) {
+            if (getChildPotion(mcMMO.p.getPotionConfig().getPotion(contents[i]), contents[Alchemy.INGREDIENT_SLOT]) != null) {
                 return true;
             }
         }
@@ -94,61 +96,79 @@ public final class AlchemyPotionBrewer {
     }
 
     private static List<ItemStack> getValidIngredients(Player player) {
-        if(player == null || UserManager.getPlayer(player) == null)
-        {
-            return PotionConfig.getInstance().getIngredients(1);
+        if(player == null || UserManager.getPlayer(player) == null) {
+            return mcMMO.p.getPotionConfig().getIngredients(1);
         }
 
-        return PotionConfig.getInstance().getIngredients(!Permissions.isSubSkillEnabled(player, SubSkillType.ALCHEMY_CONCOCTIONS) ? 1 : UserManager.getPlayer(player).getAlchemyManager().getTier());
+        return mcMMO.p.getPotionConfig().getIngredients(!Permissions.isSubSkillEnabled(player, SubSkillType.ALCHEMY_CONCOCTIONS) ? 1 : UserManager.getPlayer(player).getAlchemyManager().getTier());
     }
 
     public static void finishBrewing(BlockState brewingStand, Player player, boolean forced) {
+        // Check if the brewing stand block state is an actual brewing stand
         if (!(brewingStand instanceof BrewingStand)) {
             return;
         }
 
-        BrewerInventory inventory = ((BrewingStand) brewingStand).getInventory();
-        ItemStack ingredient = inventory.getIngredient() == null ? null : inventory.getIngredient().clone();
+        // Retrieve the inventory of the brewing stand and clone the current ingredient for safe manipulation
+        final BrewerInventory inventory = ((BrewingStand) brewingStand).getInventory();
+        final ItemStack ingredient = inventory.getIngredient() == null ? null : inventory.getIngredient().clone();
 
+        // Check if the brewing stand has a valid ingredient; if not, exit the method
         if (!hasIngredient(inventory, player)) {
+            // debug
             return;
         }
 
+        // Initialize lists to hold the potions before and after brewing, initially setting them to null
         List<AlchemyPotion> inputList = new ArrayList<>(Collections.nCopies(3, null));
         List<ItemStack> outputList = new ArrayList<>(Collections.nCopies(3, null));
 
+        // Process each of the three slots in the brewing stand
         for (int i = 0; i < 3; i++) {
             ItemStack item = inventory.getItem(i);
 
-            if (isEmpty(item) || item.getType() == Material.GLASS_BOTTLE || !PotionConfig.getInstance().isValidPotion(item)) {
+            // Skip the slot if it's empty, contains a glass bottle, or holds an invalid potion
+            if (isEmpty(item)
+                    || item.getType() == Material.GLASS_BOTTLE
+                    || !mcMMO.p.getPotionConfig().isValidPotion(item)) {
+                // debug
                 continue;
             }
 
-            AlchemyPotion input = PotionConfig.getInstance().getPotion(item);
+            // Retrieve the potion configurations for the input and resulting output potion
+            AlchemyPotion input = mcMMO.p.getPotionConfig().getPotion(item);
             AlchemyPotion output = input.getChild(ingredient);
 
+            // Update the input list with the current potion
             inputList.set(i, input);
 
+            // If there is a valid output potion, add it to the output list
             if (output != null) {
                 outputList.set(i, output.toItemStack(item.getAmount()).clone());
             }
         }
 
+        // Create a fake brewing event and pass it to the plugin's event system
         FakeBrewEvent event = new FakeBrewEvent(brewingStand.getBlock(), inventory, outputList, ((BrewingStand) brewingStand).getFuelLevel());
         mcMMO.p.getServer().getPluginManager().callEvent(event);
 
+        // If the event is cancelled or there are no potions processed, exit the method
         if (event.isCancelled() || inputList.isEmpty()) {
+            // debug
             return;
         }
 
+        // Update the brewing inventory with the new potions
         for (int i = 0; i < 3; i++) {
             if(outputList.get(i) != null) {
                 inventory.setItem(i, outputList.get(i));
             }
         }
 
+        // Remove the used ingredient from the brewing inventory
         removeIngredient(inventory, player);
 
+        // Handle potion brewing success and related effects for each potion processed
         for (AlchemyPotion input : inputList) {
             if (input == null) continue;
 
@@ -157,13 +177,14 @@ public final class AlchemyPotionBrewer {
             if (output != null && player != null) {
                 PotionStage potionStage = PotionStage.getPotionStage(input, output);
 
-                //TODO: hmm
-                if (UserManager.hasPlayerDataKey(player)) {
+                // Update player alchemy skills or effects based on brewing success
+                if (UserManager.getPlayer(player) != null) {
                     UserManager.getPlayer(player).getAlchemyManager().handlePotionBrewSuccesses(potionStage, 1);
                 }
             }
         }
 
+        // If the brewing was not forced by external conditions, schedule a new update
         if (!forced) {
             scheduleUpdate(inventory);
         }
